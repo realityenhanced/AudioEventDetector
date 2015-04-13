@@ -82,7 +82,6 @@ cost <- CostFunction(initialTheta);
 # Get optimal theta using gradient descent
 optimalTheta <- optim(par=initialTheta,fn=CostFunction);
 theta <- optimalTheta$par
-print(theta);
 
 # Cost at optimal value of the theta
 print(optimalTheta$value);
