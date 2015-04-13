@@ -8,23 +8,88 @@ require(audio);
 # Duration of the training wav files is not mandated, only the first 60ms wndow will be used for training.
 # So make sure the first 60ms contain the event to be detected.
 
+# HELPER FUNCTIONS
+
+# Sigmoid function
+Sigmoid <- function(z)
+{
+  g <- 1/(1+exp(-z));
+  return(g);
+}
+
+# Cost Function
+CostFunction <- function(theta)
+{
+  m <- nrow(X);
+  g <- Sigmoid(X %*% theta);
+  J <- (1/m)*sum((-Y*log(g)) - ((1-Y)*log(1-g)));
+  return(J)
+}
+
+#
+
 # Configuration Variables
 POSITIVE_FOLDER <- "positive";
 NEGATIVE_FOLDER <- "negative";
+NUM_SAMPLES <- 0.06 * 16000; # 0.06s worth of samples at 16KHz
 
-# Load positive data
+# Files
 positiveFiles <- list.files(POSITIVE_FOLDER, pattern = "*.wav");
+negativeFiles <- list.files(NEGATIVE_FOLDER, pattern = "*.wav");
+numInputs <- length(positiveFiles) + length(negativeFiles);
+
+# Regression Variables
+X <- matrix(NA, nrow = numInputs, ncol = NUM_SAMPLES);
+Y <- matrix(NA, nrow = numInputs, ncol = 1);
+
+# TODO: Move this to a helper function
+# Load positive data
+currentRow <- 1;
 for (file in positiveFiles)
 {
   data <- load.wave(paste(POSITIVE_FOLDER, file, sep = "/"));
+  print(length(data));
   
-  # TODO: Create the X matrix after extracting feature sets from the data
-  #       TBD.
+  # TODO: Up/Downsample the data to 16KHz & experiment with features
+  X[currentRow,] <- data[1:NUM_SAMPLES];
+  Y[currentRow] <- 1;
+  
+  currentRow <- currentRow + 1;
 }
 
 # Load negative data
-negativeFiles <- list.files(NEGATIVE_FOLDER, pattern = "*.wav");
 for (file in negativeFiles)
 {
   data <- load.wave(paste(NEGATIVE_FOLDER, file, sep = "/"));
+  print(length(data));
+  
+  # TODO: Up/Downsample the data to 16KHz & experiment with features
+  X[currentRow,] <- data[1:NUM_SAMPLES];
+  Y[currentRow] <- 0;
+  
+  currentRow <- currentRow + 1;
+}
+
+# Add ones to X
+X <- cbind(rep(1, nrow(X)), X);
+
+# Intial theta
+initialTheta <- rep(0, ncol(X));
+
+# Cost at inital theta
+cost <- CostFunction(initialTheta);
+
+# Get optimal theta using gradient descent
+optimalTheta <- optim(par=initialTheta,fn=CostFunction);
+theta <- optimalTheta$par
+print(theta);
+
+# Cost at optimal value of the theta
+print(optimalTheta$value);
+
+# Prob of all sample
+for (i in 1:nrow(X))
+{
+    prob <- Sigmoid(X[i,]%*%theta)
+    print(prob);
 }
