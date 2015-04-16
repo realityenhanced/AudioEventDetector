@@ -26,6 +26,27 @@ CostFunction <- function(theta)
   return(J)
 }
 
+# Plot waveforms
+PlotAudioData <- function(data, title)
+{
+  # Create a new plot for audio waveform
+  dev.new();
+  
+  # Create a 2x2 grid plot and store the old par val for restoring later
+  old.par <- par(mfrow=c(2,2));
+  
+  plot(data, main=title, xlab="Amplitude", ylab="Time");
+  
+  # Create a new plot for Re(ffts)
+  reffts = Re(fft(data))
+  plot(reffts);
+  
+  # Create a new plot for Im(ffts)
+  imffts = Im(fft(data))
+  plot(imffts);
+  
+  par(old.par);
+}
 #
 
 # Configuration Variables
@@ -47,12 +68,18 @@ Y <- matrix(NA, nrow = numInputs, ncol = 1);
 currentRow <- 1;
 for (file in positiveFiles)
 {
-  data <- load.wave(paste(POSITIVE_FOLDER, file, sep = "/"));
+  filePath <- paste(POSITIVE_FOLDER, file, sep = "/");
+  
+  data <- load.wave(filePath);
   print(length(data));
   
   # TODO: Up/Downsample the data to 16KHz & experiment with features
-  X[currentRow,] <- data[1:NUM_SAMPLES];
+  # TMP: Use real parts of the FFT
+  X[currentRow,] <- Re(fft(data[1:NUM_SAMPLES]));
   Y[currentRow] <- 1;
+  
+  # Plot out discrete audio waveform, real and imaginary parts of the fft
+  PlotAudioData(data[1:NUM_SAMPLES], filePath);
   
   currentRow <- currentRow + 1;
 }
@@ -60,12 +87,17 @@ for (file in positiveFiles)
 # Load negative data
 for (file in negativeFiles)
 {
-  data <- load.wave(paste(NEGATIVE_FOLDER, file, sep = "/"));
+  filePath <- paste(NEGATIVE_FOLDER, file, sep = "/");
+  data <- load.wave(filePath);
   print(length(data));
   
   # TODO: Up/Downsample the data to 16KHz & experiment with features
-  X[currentRow,] <- data[1:NUM_SAMPLES];
+  # TMP: Use real parts of the FFT
+  X[currentRow,] <- Re(fft(data[1:NUM_SAMPLES]));
   Y[currentRow] <- 0;
+  
+  # Plot out discrete audio waveform, real and imaginary parts of the fft
+  PlotAudioData(data[1:NUM_SAMPLES], filePath);
   
   currentRow <- currentRow + 1;
 }
@@ -80,8 +112,9 @@ initialTheta <- rep(0, ncol(X));
 cost <- CostFunction(initialTheta);
 
 # Get optimal theta using gradient descent
-optimalTheta <- optim(par=initialTheta,fn=CostFunction);
-theta <- optimalTheta$par
+optimalTheta <- optim(par=initialTheta, fn=CostFunction);
+theta <- optimalTheta$par;
+plot(theta);
 
 # Cost at optimal value of the theta
 print(optimalTheta$value);
@@ -89,6 +122,6 @@ print(optimalTheta$value);
 # Prob of all sample
 for (i in 1:nrow(X))
 {
-    prob <- Sigmoid(X[i,]%*%theta)
+    prob <- Sigmoid(Re(fft(X[i,]))%*%theta)
     print(prob);
 }
