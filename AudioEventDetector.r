@@ -26,6 +26,17 @@ CostFunction <- function(theta)
   return(J)
 }
 
+# Feature Extract
+GetFeatures <- function(data)
+{
+  ffts <- fft(data);
+  features <- Mod(ffts);
+  
+  lapply(features, function(x) { if (x <= 0.05) { return (0);} else if (x >= 0.95){ return (0.95); } })
+  
+  return(features);
+}
+
 # Plot waveforms
 PlotAudioData <- function(data, title)
 {
@@ -37,13 +48,19 @@ PlotAudioData <- function(data, title)
   
   plot(data, main=title, xlab="Amplitude", ylab="Time");
   
+  ffts <- fft(data);
+  
   # Create a new plot for Re(ffts)
-  reffts = Re(fft(data))
+  reffts = Re(ffts);
   plot(reffts);
   
   # Create a new plot for Im(ffts)
-  imffts = Im(fft(data))
+  imffts = Im(ffts);
   plot(imffts);
+  
+  # Create a new plot for Mod(ffts)
+  modffts = Mod(ffts)
+  plot(modffts);
   
   par(old.par);
 }
@@ -75,7 +92,7 @@ for (file in positiveFiles)
   
   # TODO: Up/Downsample the data to 16KHz & experiment with features
   # TMP: Use real parts of the FFT
-  X[currentRow,] <- Re(fft(data[1:NUM_SAMPLES]));
+  X[currentRow,] <- GetFeatures(data[1:NUM_SAMPLES]);
   Y[currentRow] <- 1;
   
   # Plot out discrete audio waveform, real and imaginary parts of the fft
@@ -92,8 +109,8 @@ for (file in negativeFiles)
   print(length(data));
   
   # TODO: Up/Downsample the data to 16KHz & experiment with features
-  # TMP: Use real parts of the FFT
-  X[currentRow,] <- Re(fft(data[1:NUM_SAMPLES]));
+  # TMP: Use mod of the FFT
+  X[currentRow,] <- GetFeatures(data[1:NUM_SAMPLES]);
   Y[currentRow] <- 0;
   
   # Plot out discrete audio waveform, real and imaginary parts of the fft
@@ -112,16 +129,31 @@ initialTheta <- rep(0, ncol(X));
 cost <- CostFunction(initialTheta);
 
 # Get optimal theta using gradient descent
-optimalTheta <- optim(par=initialTheta, fn=CostFunction);
+optimalTheta <- optim(par=initialTheta, fn=CostFunction, control = list(maxit = 200000));
 theta <- optimalTheta$par;
 plot(theta);
 
 # Cost at optimal value of the theta
 print(optimalTheta$value);
 
-# Prob of all sample
+# Print Prob values for all Training samples
 for (i in 1:nrow(X))
 {
-    prob <- Sigmoid(Re(fft(X[i,]))%*%theta)
+    prob <- Sigmoid(X[i,]%*%theta);
+    if (prob > 0.5 && i <= length(positiveFiles))
+    {
+      print("AUDIO EVENT CORRECTLY DETECTED");
+    }
+    else if (prob <= 0.5 && i > length(positiveFiles))
+    {
+      print("NON-AUDIO CORRECTLY DETECTED");
+    }
+    else
+    {
+      print("WRONG JUDGEMENT");
+    }
     print(prob);
 }
+
+# TODO: Compare against non-training samples
+# ...
