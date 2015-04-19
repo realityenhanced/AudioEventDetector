@@ -3,10 +3,20 @@ require(audio);
 # Logistic Regression for binary classification of Audio data
 # Positive Inputs are under the positive folder and Negative Inputs under the negative folder
 # Audio files need to be uncompressed wav files.
-# Sample rate of the training wav files could be anything and will be re-sampled to 16Khz, here.
+# Sample rate of the training wav files should be 16Khz.
 # Only the first channel will be used for training, if a multi channel wave file is used as input.
-# Duration of the training wav files is not mandated, only the first 60ms wndow will be used for training.
-# So make sure the first 60ms contain the event to be detected.
+# Duration of the training wav files is not mandated, only the first 10ms wndow will be used for training.
+# So make sure the first 10ms contain the event to be detected.
+
+# Configuration Variables
+POSITIVE_FOLDER <<- "positive";
+NEGATIVE_FOLDER <<- "negative";
+NUM_SAMPLES <<- 0.010 * 16000; # 0.01s worth of samples at 16KHz
+
+# GLOBALS
+X <<- 0; # features
+Y <<- 0; # results
+opttheta <<- 0; # final theta calculated
 
 # HELPER FUNCTIONS
 
@@ -30,9 +40,12 @@ CostFunction <- function(theta)
 GetFeatures <- function(data)
 {
   ffts <- fft(data);
-  features <- Mod(ffts);
   
-  lapply(features, function(x) { if (x <= 0.05) { return (0);} else if (x >= 0.95){ return (0.95); } })
+  # Use the real part (contribution of the cos waves)
+  features <- Re(ffts);
+  
+  # Filter out extreme values
+  #lapply(features, function(x) { if (x <= 0.05) { return (0);} else if (x >= 0.95){ return (0.95); } })
   
   return(features);
 }
@@ -66,94 +79,119 @@ PlotAudioData <- function(data, title)
 }
 #
 
-# Configuration Variables
-POSITIVE_FOLDER <- "positive";
-NEGATIVE_FOLDER <- "negative";
-NUM_SAMPLES <- 0.06 * 16000; # 0.06s worth of samples at 16KHz
-
-# Files
-positiveFiles <- list.files(POSITIVE_FOLDER, pattern = "*.wav");
-negativeFiles <- list.files(NEGATIVE_FOLDER, pattern = "*.wav");
-numInputs <- length(positiveFiles) + length(negativeFiles);
-
-# Regression Variables
-X <- matrix(NA, nrow = numInputs, ncol = NUM_SAMPLES);
-Y <- matrix(NA, nrow = numInputs, ncol = 1);
-
-# TODO: Move this to a helper function
-# Load positive data
-currentRow <- 1;
-for (file in positiveFiles)
+# Load a wav file and extract features
+LoadFeaturesFromWav <- function(filePath)
 {
-  filePath <- paste(POSITIVE_FOLDER, file, sep = "/");
+  print(filePath);
   
   data <- load.wave(filePath);
-  print(length(data));
+  if (data$rate != 16000)
+  {
+    print(data$rate);
+    print("ERROR! Sample rate != 16Khz");
+    stop();
+  }
+  
+  if (length(data) < NUM_SAMPLES)
+  {
+    print(length(data));
+    print(NUM_SAMPLES);      
+    print("ERROR! Not enoough samples");
+    stop();
+  }
   
   # TODO: Up/Downsample the data to 16KHz & experiment with features
   # TMP: Use real parts of the FFT
-  X[currentRow,] <- GetFeatures(data[1:NUM_SAMPLES]);
-  Y[currentRow] <- 1;
-  
-  # Plot out discrete audio waveform, real and imaginary parts of the fft
-  PlotAudioData(data[1:NUM_SAMPLES], filePath);
-  
-  currentRow <- currentRow + 1;
+  return (GetFeatures(data[1:NUM_SAMPLES]));
 }
+#
 
-# Load negative data
-for (file in negativeFiles)
+# Main entry point
+Main <- function()
 {
-  filePath <- paste(NEGATIVE_FOLDER, file, sep = "/");
-  data <- load.wave(filePath);
-  print(length(data));
+  # Files
+  positiveFiles <- list.files(POSITIVE_FOLDER, pattern = "*.wav");
+  negativeFiles <- list.files(NEGATIVE_FOLDER, pattern = "*.wav");
+  numInputs <- length(positiveFiles) + length(negativeFiles);
   
-  # TODO: Up/Downsample the data to 16KHz & experiment with features
-  # TMP: Use mod of the FFT
-  X[currentRow,] <- GetFeatures(data[1:NUM_SAMPLES]);
-  Y[currentRow] <- 0;
+  # Regression Variables
+  X <<- matrix(NA, nrow = numInputs, ncol = NUM_SAMPLES);
+  Y <<- matrix(NA, nrow = numInputs, ncol = 1);
   
-  # Plot out discrete audio waveform, real and imaginary parts of the fft
-  PlotAudioData(data[1:NUM_SAMPLES], filePath);
+  # TODO: Move this to a helper function
+  # Load positive data
+  currentRow <- 1;
+  for (file in positiveFiles)
+  {
+    filePath <- paste(POSITIVE_FOLDER, file, sep = "/");
+    print(filePath);
+    
+    X[currentRow,] <<- LoadFeaturesFromWav(filePath);
+    Y[currentRow] <<- 1;
+    
+    # Plot out discrete audio waveform, real and imaginary parts of the fft
+    PlotAudioData(X[currentRow,], filePath);
+    
+    currentRow <- currentRow + 1;
+  }
   
-  currentRow <- currentRow + 1;
+  # Load negative data
+  for (file in negativeFiles)
+  {
+    filePath <- paste(NEGATIVE_FOLDER, file, sep = "/");
+    
+    X[currentRow,] <<- LoadFeaturesFromWav(filePath);
+    Y[currentRow] <<- 0;
+    
+    # Plot out discrete audio waveform, real and imaginary parts of the fft
+    PlotAudioData(X[currentRow,], filePath);
+    
+    currentRow <- currentRow + 1;
+  }
+  
+  # Add ones to X
+  X <<- cbind(rep(1, nrow(X)), X);
+  
+  # Intial theta
+  initialTheta <- rep(0, ncol(X));
+  
+  # Cost at inital theta
+  cost <- CostFunction(initialTheta);
+  
+  # Get optimal theta using gradient descent
+  optimalTheta <- optim(par=initialTheta, fn=CostFunction, control = list(maxit = 200000));
+  opttheta <<- optimalTheta$par;
+  plot(opttheta);
+  
+  # Cost at optimal value of the theta
+  print(optimalTheta$value);
+  
+  # Print Prob values for all Training samples
+  numIncorrect <- 0;
+  for (i in 1:nrow(X))
+  {
+      prob <- Sigmoid(X[i,]%*%opttheta);
+      if (prob > 0.5 && i <= length(positiveFiles))
+      {
+        print("AUDIO EVENT CORRECTLY DETECTED");
+      }
+      else if (prob <= 0.5 && i > length(positiveFiles))
+      {
+        print("NON-AUDIO CORRECTLY DETECTED");
+      }
+      else
+      {
+        print("WRONG JUDGEMENT");
+        numIncorrect <- numIncorrect + 1;
+      }
+      print(prob);
+  }
+  print("NUM INCORRECT = ");
+  print(numIncorrect);
+  
+  # TODO: Compare against non-training samples
+  # ...
 }
 
-# Add ones to X
-X <- cbind(rep(1, nrow(X)), X);
-
-# Intial theta
-initialTheta <- rep(0, ncol(X));
-
-# Cost at inital theta
-cost <- CostFunction(initialTheta);
-
-# Get optimal theta using gradient descent
-optimalTheta <- optim(par=initialTheta, fn=CostFunction, control = list(maxit = 200000));
-theta <- optimalTheta$par;
-plot(theta);
-
-# Cost at optimal value of the theta
-print(optimalTheta$value);
-
-# Print Prob values for all Training samples
-for (i in 1:nrow(X))
-{
-    prob <- Sigmoid(X[i,]%*%theta);
-    if (prob > 0.5 && i <= length(positiveFiles))
-    {
-      print("AUDIO EVENT CORRECTLY DETECTED");
-    }
-    else if (prob <= 0.5 && i > length(positiveFiles))
-    {
-      print("NON-AUDIO CORRECTLY DETECTED");
-    }
-    else
-    {
-      print("WRONG JUDGEMENT");
-    }
-    print(prob);
-}
-
-# TODO: Compare against non-training samples
-# ...
+# Run the main entry point
+Main();
