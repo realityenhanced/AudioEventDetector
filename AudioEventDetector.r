@@ -44,7 +44,7 @@ GetFeatures <- function(data)
   # Use the real part (contribution of the cos waves)
   features <- Re(ffts);
   
-  # Filter out extreme values
+  # TEST: Do not Filter out extreme values
   #lapply(features, function(x) { if (x <= 0.05) { return (0);} else if (x >= 0.95){ return (0.95); } })
   
   return(features);
