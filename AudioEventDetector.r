@@ -1,3 +1,6 @@
+#install.packages('caTools');
+#install.packages('audio');
+require(caTools);
 require(audio);
 
 # Logistic Regression for binary classification of Audio data
@@ -57,7 +60,7 @@ PlotAudioData <- function(data, title)
   dev.new();
   
   # Create a 2x2 grid plot and store the old par val for restoring later
-  old.par <- par(mfrow=c(2,2));
+  old.par <- par(mfrow=c(2,3));
   
   plot(data, main=title, xlab="Amplitude", ylab="Time");
   
@@ -74,6 +77,16 @@ PlotAudioData <- function(data, title)
   # Create a new plot for Mod(ffts)
   modffts = Mod(ffts)
   plot(modffts);
+  
+  # New plot for moving window average
+  WINDOW_SIZE <- 5;
+  slidingMean <- runmean(abs(data), WINDOW_SIZE, endrule="mean", align="left");
+  plot(slidingMean[0:20]);
+  
+  # Plot deltas between consecutive samples
+  delta <- slidingMean[1:length(slidingMean)-1];
+  delta <- (abs(delta - slidingMean[2:length(slidingMean)])/delta) ;
+  plot(delta[0:20]);
   
   par(old.par);
 }
