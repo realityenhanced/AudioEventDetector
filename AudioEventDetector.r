@@ -78,15 +78,30 @@ PlotAudioData <- function(data, title)
   modffts = Mod(ffts)
   plot(modffts);
   
-  # New plot for moving window average
-  WINDOW_SIZE <- 5;
-  slidingMean <- runmean(abs(data), WINDOW_SIZE, endrule="mean", align="left");
-  plot(slidingMean[0:20]);
+  # DISABLED: New plot for moving window average
+  #WINDOW_SIZE <- 5;
+  #slidingMean <- runmean(abs(data), WINDOW_SIZE, endrule="mean", align="left");
+  #plot(slidingMean[0:20]);
   
   # Plot deltas between consecutive samples
-  delta <- slidingMean[1:length(slidingMean)-1];
-  delta <- (abs(delta - slidingMean[2:length(slidingMean)])/delta) ;
-  plot(delta[0:20]);
+  #delta <- slidingMean[1:length(slidingMean)-1];
+  #delta <- (abs(delta - slidingMean[2:length(slidingMean)])/delta) ;
+  #plot(delta[0:20]);
+  
+  # Plot the sectional means
+  SECTION_SIZE <- 25;
+  numMeans <- length(data)%/%SECTION_SIZE;
+  means <- matrix(0, nrow = numMeans, ncol = 1);
+  for (i in 1:numMeans)
+  {
+    means[i] <- mean(abs(data[(1+((i-1)*SECTION_SIZE)) : (i*SECTION_SIZE)]));
+  }
+  plot(means);
+
+  # Plot deltas between consecutive samples
+  delta <- means[1:length(means)-1];
+  delta <- (abs(delta - means[2:length(means)])/delta) ;
+  plot(delta);
   
   par(old.par);
 }
