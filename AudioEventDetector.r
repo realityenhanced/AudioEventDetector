@@ -143,47 +143,69 @@ TestNonTrainingSamples <- function (optimalTheta)
   positiveTestFiles <- list.files(POSITIVE_TEST_FOLDER, pattern = "*.wav");
   negativeTestFiles <- list.files(NEGATIVE_TEST_FOLDER, pattern = "*.wav");
   numTestInputs <- length(positiveTestFiles) + length(negativeTestFiles);
-  
-  # Regression Variables
-  X <- matrix(NA, nrow = numTestInputs, ncol = NUM_SAMPLES);
-  Y <- matrix(NA, nrow = numTestInputs, ncol = 1);
 
-  # Load positive data
-  currentRow <- 1;
+  numIncorrect <- 0;
+  
+  # Test positive data
   for (file in positiveTestFiles)
   {
     filePath <- paste(POSITIVE_TEST_FOLDER, file, sep = "/");
+    print(filePath);
     
-    X[currentRow,] <- LoadFeaturesFromWav(filePath);
-    Y[currentRow] <- TRUE;
+    data <- load.wave(filePath);
     
-    currentRow <- currentRow + 1;
+    wasEventFound <- FALSE;
+    for (start in (1: (length(data) - NUM_SAMPLES)))
+    {
+      features <- GetFeatures(data[start:(start+NUM_SAMPLES-1)]);
+      features <- c(1, features);
+      probability <- Sigmoid(features%*%optimalTheta);
+      if (probability > 0.5)
+      {
+        wasEventFound <- TRUE;
+        print(paste("EVENT FOUND AT ", start));
+        break;
+      }
+    }
+    
+    if (!wasEventFound)
+    {
+      print("FAILED: Event not found in positive sample");
+      numIncorrect <- numIncorrect + 1;
+    }
+    
   }
   
-  # Load negative data
+  # Test negative data
   for (file in negativeTestFiles)
   {
     filePath <- paste(NEGATIVE_TEST_FOLDER, file, sep = "/");
+    print(filePath);
     
-    X[currentRow,] <- LoadFeaturesFromWav(filePath);
-    Y[currentRow] <- FALSE;
+    data <- load.wave(filePath);
     
-    currentRow <- currentRow + 1;
+    wasEventFound <- FALSE;
+    for (start in (1: (length(data) - NUM_SAMPLES)))
+    {
+      features <- GetFeatures(data[start:(start+NUM_SAMPLES-1)]);
+      features <- c(1, features);
+      probability <- Sigmoid(features%*%optimalTheta);
+      if (probability > 0.5)
+      {
+        wasEventFound <- TRUE;
+        print(paste("EVENT FOUND AT ", start));
+        break;
+      }
+    }
+    
+    if (wasEventFound)
+    {
+      print("FAILED: Event was found in negative sample");
+      numIncorrect <- numIncorrect + 1;
+    } 
   }
   
-  # Add ones to X
-  X <- cbind(rep(1, nrow(X)), X);
-  
-  # Print Prob values for all non-Training samples
-  numIncorrect <- 0;
-  probabilities <- Sigmoid(X%*%optimalTheta);
-  
-  # Find the diffs from the expected values
-  lapply(probabilities, function(x) { if (x <= 0.5) { return (FALSE); } else { return (TRUE); } });
-  numIncorrect <- sum(probabilities == Y);
-  
-  print("NUM INCORRECT = ");
-  print(numIncorrect);
+  print(paste("NUM INCORRECT = ", numIncorrect));
 }
 
 # Main entry point
