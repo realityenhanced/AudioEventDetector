@@ -134,6 +134,58 @@ LoadFeaturesFromWav <- function(filePath)
 }
 #
 
+# Test non-training samples
+TestNonTrainingSamples <- function (optimalTheta)
+{
+  POSITIVE_TEST_FOLDER <- "TestFiles/positive";
+  NEGATIVE_TEST_FOLDER <- "TestFiles/negative";
+  
+  positiveTestFiles <- list.files(POSITIVE_TEST_FOLDER, pattern = "*.wav");
+  negativeTestFiles <- list.files(NEGATIVE_TEST_FOLDER, pattern = "*.wav");
+  numTestInputs <- length(positiveTestFiles) + length(negativeTestFiles);
+  
+  # Regression Variables
+  X <- matrix(NA, nrow = numTestInputs, ncol = NUM_SAMPLES);
+  Y <- matrix(NA, nrow = numTestInputs, ncol = 1);
+
+  # Load positive data
+  currentRow <- 1;
+  for (file in positiveTestFiles)
+  {
+    filePath <- paste(POSITIVE_TEST_FOLDER, file, sep = "/");
+    
+    X[currentRow,] <- LoadFeaturesFromWav(filePath);
+    Y[currentRow] <- TRUE;
+    
+    currentRow <- currentRow + 1;
+  }
+  
+  # Load negative data
+  for (file in negativeTestFiles)
+  {
+    filePath <- paste(NEGATIVE_TEST_FOLDER, file, sep = "/");
+    
+    X[currentRow,] <- LoadFeaturesFromWav(filePath);
+    Y[currentRow] <- FALSE;
+    
+    currentRow <- currentRow + 1;
+  }
+  
+  # Add ones to X
+  X <- cbind(rep(1, nrow(X)), X);
+  
+  # Print Prob values for all non-Training samples
+  numIncorrect <- 0;
+  probabilities <- Sigmoid(X%*%optimalTheta);
+  
+  # Find the diffs from the expected values
+  lapply(probabilities, function(x) { if (x <= 0.5) { return (FALSE); } else { return (TRUE); } });
+  numIncorrect <- sum(probabilities == Y);
+  
+  print("NUM INCORRECT = ");
+  print(numIncorrect);
+}
+
 # Main entry point
 Main <- function()
 {
@@ -146,13 +198,11 @@ Main <- function()
   X <<- matrix(NA, nrow = numInputs, ncol = NUM_SAMPLES);
   Y <<- matrix(NA, nrow = numInputs, ncol = 1);
   
-  # TODO: Move this to a helper function
   # Load positive data
   currentRow <- 1;
   for (file in positiveFiles)
   {
     filePath <- paste(POSITIVE_FOLDER, file, sep = "/");
-    print(filePath);
     
     X[currentRow,] <<- LoadFeaturesFromWav(filePath);
     Y[currentRow] <<- 1;
@@ -194,31 +244,8 @@ Main <- function()
   # Cost at optimal value of the theta
   print(optimalTheta$value);
   
-  # Print Prob values for all Training samples
-  numIncorrect <- 0;
-  for (i in 1:nrow(X))
-  {
-      prob <- Sigmoid(X[i,]%*%opttheta);
-      if (prob > 0.5 && i <= length(positiveFiles))
-      {
-        print("AUDIO EVENT CORRECTLY DETECTED");
-      }
-      else if (prob <= 0.5 && i > length(positiveFiles))
-      {
-        print("NON-AUDIO CORRECTLY DETECTED");
-      }
-      else
-      {
-        print("WRONG JUDGEMENT");
-        numIncorrect <- numIncorrect + 1;
-      }
-      print(prob);
-  }
-  print("NUM INCORRECT = ");
-  print(numIncorrect);
-  
   # TODO: Compare against non-training samples
-  # ...
+  TestNonTrainingSamples(optimalTheta=opttheta);
 }
 
 # Run the main entry point
