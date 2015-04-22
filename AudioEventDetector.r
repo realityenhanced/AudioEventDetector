@@ -90,19 +90,19 @@ PlotAudioData <- function(filePath)
   #delta <- (abs(delta - slidingMean[2:length(slidingMean)])/delta) ;
   #plot(delta[0:20]);
   
-  # Plot the sectional means
-  SECTION_SIZE <- 25;
-  numMeans <- length(data)%/%SECTION_SIZE;
-  means <- matrix(0, nrow = numMeans, ncol = 1);
-  for (i in 1:numMeans)
+  # Plot the sectional energy
+  SECTION_SIZE <- 5;
+  numSections <- length(data)%/%SECTION_SIZE;
+  energies <- matrix(0, nrow = numSections, ncol = 1);
+  for (i in 1:numSections)
   {
-    means[i] <- mean(abs(data[(1+((i-1)*SECTION_SIZE)) : (i*SECTION_SIZE)]));
+    energies[i] <- sum(abs(data[(1+((i-1)*SECTION_SIZE)) : (i*SECTION_SIZE)]));
   }
-  plot(means);
+  plot(energies);
 
   # Plot deltas between consecutive samples
-  delta <- means[1:length(means)-1];
-  delta <- (abs(delta - means[2:length(means)])/delta) ;
+  delta <- energies[1:length(energies)-1];
+  delta <- (abs(delta - energies[2:length(energies)])/delta) ;
   plot(delta);
   
   par(old.par);
@@ -110,7 +110,7 @@ PlotAudioData <- function(filePath)
 #
 
 # Load a wav file and extract features
-LoadFeaturesFromWav <- function(filePath)
+LoadDataFromWav <- function(filePath)
 {
   print(filePath);
   
@@ -129,10 +129,8 @@ LoadFeaturesFromWav <- function(filePath)
     print("ERROR! Not enoough samples");
     stop();
   }
-  
-  # TODO: Up/Downsample the data to 16KHz & experiment with features
-  # TMP: Use real parts of the FFT
-  return (GetFeatures(data[1:NUM_SAMPLES]));
+
+  return (data);
 }
 #
 
@@ -218,23 +216,21 @@ Main <- function()
   negativeFiles <- list.files(NEGATIVE_FOLDER, pattern = "*.wav");
   numInputs <- length(positiveFiles) + length(negativeFiles);
   
-  # Regression Variables
-  X <<- matrix(NA, nrow = numInputs, ncol = NUM_SAMPLES);
-  Y <<- matrix(NA, nrow = numInputs, ncol = 1);
+  # Vectors to accumulate features and results before converting to matrix form
+  Xvec <<- NULL;
+  Yvec <<- NULL;
   
   # Load positive data
-  currentRow <- 1;
   for (file in positiveFiles)
   {
     filePath <- paste(POSITIVE_FOLDER, file, sep = "/");
     
-    X[currentRow,] <<- LoadFeaturesFromWav(filePath);
-    Y[currentRow] <<- 1;
+    data <- LoadDataFromWav(filePath);
+    Xvec <<- c(Xvec, GetFeatures(data[1:NUM_SAMPLES]));
+    Yvec <<- c(Yvec, 1);
     
     # Plot out discrete audio waveform, real and imaginary parts of the fft
     PlotAudioData(filePath);
-    
-    currentRow <- currentRow + 1;
   }
   
   # Load negative data
@@ -242,14 +238,22 @@ Main <- function()
   {
     filePath <- paste(NEGATIVE_FOLDER, file, sep = "/");
     
-    X[currentRow,] <<- LoadFeaturesFromWav(filePath);
-    Y[currentRow] <<- 0;
+    data <- LoadDataFromWav(filePath);
+    
+    # Treat all NUM_SAMPLES sections as negative cases
+    for (start in 1:(length(data) - NUM_SAMPLES))
+    {
+      Xvec <<- c(Xvec, GetFeatures(data[start: (start + NUM_SAMPLES - 1)]));
+      Yvec <<- c(Yvec, 0);
+    }
     
     # Plot out discrete audio waveform, real and imaginary parts of the fft
     PlotAudioData(filePath);
-    
-    currentRow <- currentRow + 1;
   }
+  
+  # Convert the features and results to matrix form
+  X <<- matrix(Xvec, ncol=NUM_SAMPLES, byrow=T);
+  Y <<- matrix(Yvec, ncol=1);
   
   # Add ones to X
   X <<- cbind(rep(1, nrow(X)), X);
