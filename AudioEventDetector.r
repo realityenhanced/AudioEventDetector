@@ -54,15 +54,17 @@ GetFeatures <- function(data)
 }
 
 # Plot waveforms
-PlotAudioData <- function(data, title)
+PlotAudioData <- function(filePath)
 {
+  data <- load.wave(filePath)[1:NUM_SAMPLES];
+  
   # Create a new plot for audio waveform
   dev.new();
   
   # Create a 2x2 grid plot and store the old par val for restoring later
   old.par <- par(mfrow=c(2,3));
   
-  plot(data, main=title, xlab="Amplitude", ylab="Time");
+  plot(data, main=filePath, xlab="Amplitude", ylab="Time");
   
   ffts <- fft(data);
   
@@ -230,7 +232,7 @@ Main <- function()
     Y[currentRow] <<- 1;
     
     # Plot out discrete audio waveform, real and imaginary parts of the fft
-    PlotAudioData(X[currentRow,], filePath);
+    PlotAudioData(filePath);
     
     currentRow <- currentRow + 1;
   }
@@ -244,7 +246,7 @@ Main <- function()
     Y[currentRow] <<- 0;
     
     # Plot out discrete audio waveform, real and imaginary parts of the fft
-    PlotAudioData(X[currentRow,], filePath);
+    PlotAudioData(filePath);
     
     currentRow <- currentRow + 1;
   }
