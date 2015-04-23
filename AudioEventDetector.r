@@ -255,7 +255,7 @@ Main <- function()
     
     data <- LoadDataFromWav(filePath);
     
-    # Find the sectional which has a >= 60% jump in energy to mark the start
+    # Find the sectional which has a jump in energy to mark the start
     start <- 0; # Invalid index
     energies <- GetSectionalEnergy(data);
     deltas <- GetDeltas(energies);
@@ -291,13 +291,28 @@ Main <- function()
     
     data <- LoadDataFromWav(filePath);
     
-    # Treat all NUM_SAMPLES sections as negative cases
-    for (start in 1:(length(data) - NUM_SAMPLES))
+    # Find the sectional which has a jump in energy to mark the start
+    start <- 0; # Invalid index
+    energies <- GetSectionalEnergy(data);
+    deltas <- GetDeltas(energies);
+    for (i in (1:length(deltas)))
     {
-      Xvec <<- c(Xvec, GetFeatures(data[start: (start + NUM_SAMPLES - 1)]));
-      Yvec <<- c(Yvec, 0);
+      # Choose the section in which the sudden jump in energy was seen
+      if (deltas[i] >= AUDIO_THRESHOLD)
+      {
+        start <- i*SECTION_SIZE;
+        
+        # Check if we have enough samples to use for training 
+        if (start + NUM_SAMPLES >= length(data))
+        {
+          break;
+        }
+        
+        Xvec <<- c(Xvec, GetFeatures(data[start: (start + NUM_SAMPLES - 1)]));
+        Yvec <<- c(Yvec, 0);
+      }
     }
-    
+
     # Plot out discrete audio waveform, real and imaginary parts of the fft
     PlotAudioData(filePath);
   }
