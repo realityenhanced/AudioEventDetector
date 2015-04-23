@@ -179,6 +179,7 @@ CheckForEvent <- function(data, optimalTheta)
 {
   energies <- GetSectionalEnergy(data);
   deltas <- GetDeltas(energies);
+  start <- 0;
   
   for (i in (1:length(deltas)))
   {
@@ -203,6 +204,11 @@ CheckForEvent <- function(data, optimalTheta)
         return (TRUE);
       }
     }
+  }
+  
+  if (start == 0)
+  {
+    print("NO JUMP FOUND");
   }
   
   return (FALSE);
