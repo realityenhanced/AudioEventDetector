@@ -15,6 +15,9 @@ require(audio);
 POSITIVE_FOLDER <<- "positive";
 NEGATIVE_FOLDER <<- "negative";
 NUM_SAMPLES <<- 0.010 * 16000; # 0.01s worth of samples at 16KHz
+SECTION_SIZE <<- 5;
+AUDIO_THRESHOLD <<- 1.0; # 100% increase
+NUM_ITERATIONS <<- 200000;
 
 # GLOBALS
 X <<- 0; # features
@@ -52,6 +55,30 @@ GetFeatures <- function(data)
   
   return(features);
 }
+#
+
+# Get the Sectional Energy
+GetSectionalEnergy <- function(data)
+{
+  numSections <- length(data)%/%SECTION_SIZE;
+  energies <- matrix(0, nrow = numSections, ncol = 1);
+  for (i in 1:numSections)
+  {
+    energies[i] <- sum(abs(data[(1+((i-1)*SECTION_SIZE)) : (i*SECTION_SIZE)]));
+  }
+  
+  return (energies);
+}
+
+# Get deltas between consecutive elements
+GetDeltas <- function(elements)
+{
+  delta <- elements[1:length(elements)-1];
+  delta <- (abs(delta - elements[2:length(elements)])/delta) ;
+  
+  return (delta);
+}
+#
 
 # Plot waveforms
 PlotAudioData <- function(filePath)
@@ -91,19 +118,12 @@ PlotAudioData <- function(filePath)
   #plot(delta[0:20]);
   
   # Plot the sectional energy
-  SECTION_SIZE <- 5;
-  numSections <- length(data)%/%SECTION_SIZE;
-  energies <- matrix(0, nrow = numSections, ncol = 1);
-  for (i in 1:numSections)
-  {
-    energies[i] <- sum(abs(data[(1+((i-1)*SECTION_SIZE)) : (i*SECTION_SIZE)]));
-  }
+  energies <- GetSectionalEnergy(data);
   plot(energies);
 
   # Plot deltas between consecutive samples
-  delta <- energies[1:length(energies)-1];
-  delta <- (abs(delta - energies[2:length(energies)])/delta) ;
-  plot(delta);
+  deltas <- GetDeltas(energies);
+  plot(deltas);
   
   par(old.par);
 }
@@ -134,6 +154,41 @@ LoadDataFromWav <- function(filePath)
 }
 #
 
+# Check for the first event in the data
+CheckForEvent <- function(data, optimalTheta)
+{
+  energies <- GetSectionalEnergy(data);
+  deltas <- GetDeltas(energies);
+  
+  for (i in (1:length(deltas)))
+  {
+    # Choose the section in which the sudden jump in energy was seen
+    if (deltas[i] >= AUDIO_THRESHOLD)
+    {
+      start <- i*SECTION_SIZE;
+      
+      # Check if we have enough samples to use for training 
+      if (start + NUM_SAMPLES >= length(data))
+      {
+        # No more samples
+        break;
+      }
+      
+      features <- GetFeatures(data[start:(start+NUM_SAMPLES-1)]);
+      features <- c(1, features);
+      probability <- Sigmoid(features%*%optimalTheta);
+      if (probability > 0.5)
+      {
+        print(paste("EVENT FOUND AT ", start));
+        return (TRUE);
+      }
+    }
+  }
+  
+  return (FALSE);
+}
+#
+
 # Test non-training samples
 TestNonTrainingSamples <- function (optimalTheta)
 {
@@ -154,26 +209,12 @@ TestNonTrainingSamples <- function (optimalTheta)
     
     data <- load.wave(filePath);
     
-    wasEventFound <- FALSE;
-    for (start in (1: (length(data) - NUM_SAMPLES)))
-    {
-      features <- GetFeatures(data[start:(start+NUM_SAMPLES-1)]);
-      features <- c(1, features);
-      probability <- Sigmoid(features%*%optimalTheta);
-      if (probability > 0.5)
-      {
-        wasEventFound <- TRUE;
-        print(paste("EVENT FOUND AT ", start));
-        break;
-      }
-    }
-    
+    wasEventFound <- CheckForEvent(data, optimalTheta)
     if (!wasEventFound)
     {
       print("FAILED: Event not found in positive sample");
       numIncorrect <- numIncorrect + 1;
     }
-    
   }
   
   # Test negative data
@@ -184,25 +225,12 @@ TestNonTrainingSamples <- function (optimalTheta)
     
     data <- load.wave(filePath);
     
-    wasEventFound <- FALSE;
-    for (start in (1: (length(data) - NUM_SAMPLES)))
-    {
-      features <- GetFeatures(data[start:(start+NUM_SAMPLES-1)]);
-      features <- c(1, features);
-      probability <- Sigmoid(features%*%optimalTheta);
-      if (probability > 0.5)
-      {
-        wasEventFound <- TRUE;
-        print(paste("EVENT FOUND AT ", start));
-        break;
-      }
-    }
-    
+    wasEventFound <- CheckForEvent(data, optimalTheta)
     if (wasEventFound)
     {
       print("FAILED: Event was found in negative sample");
       numIncorrect <- numIncorrect + 1;
-    } 
+    }
   }
   
   print(paste("NUM INCORRECT = ", numIncorrect));
@@ -226,7 +254,30 @@ Main <- function()
     filePath <- paste(POSITIVE_FOLDER, file, sep = "/");
     
     data <- LoadDataFromWav(filePath);
-    Xvec <<- c(Xvec, GetFeatures(data[1:NUM_SAMPLES]));
+    
+    # Find the sectional which has a >= 60% jump in energy to mark the start
+    start <- 0; # Invalid index
+    energies <- GetSectionalEnergy(data);
+    deltas <- GetDeltas(energies);
+    for (i in (1:length(deltas)))
+    {
+      # Choose the section in which the sudden jump in energy was seen
+      if (deltas[i] >= AUDIO_THRESHOLD)
+      {
+        start <- i*SECTION_SIZE;
+        break;
+      }
+    }
+    print(max(deltas));
+    
+    # Check if we have enough samples to use for training 
+    if (start + NUM_SAMPLES >= length(data))
+    {
+      print("ERROR: No jump found in wav");
+      stop();
+    }
+    
+    Xvec <<- c(Xvec, GetFeatures(data[start:(start + NUM_SAMPLES - 1)]));
     Yvec <<- c(Yvec, 1);
     
     # Plot out discrete audio waveform, real and imaginary parts of the fft
@@ -265,7 +316,7 @@ Main <- function()
   cost <- CostFunction(initialTheta);
   
   # Get optimal theta using gradient descent
-  optimalTheta <- optim(par=initialTheta, fn=CostFunction, control = list(maxit = 200000));
+  optimalTheta <- optim(par=initialTheta, fn=CostFunction, control = list(maxit = NUM_ITERATIONS));
   opttheta <<- optimalTheta$par;
   plot(opttheta);
   
