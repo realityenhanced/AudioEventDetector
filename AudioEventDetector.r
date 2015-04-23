@@ -17,7 +17,7 @@ NEGATIVE_FOLDER <<- "negative";
 NUM_SAMPLES <<- 0.010 * 16000; # 0.01s worth of samples at 16KHz
 SECTION_SIZE <<- 5;
 AUDIO_THRESHOLD <<- 1.0; # 100% increase
-NUM_ITERATIONS <<- 200000;
+NUM_ITERATIONS <<- 1000000;
 
 # GLOBALS
 X <<- 0; # features
@@ -327,5 +327,12 @@ Main <- function()
   TestNonTrainingSamples(optimalTheta=opttheta);
 }
 
+# Start Timing the training
+ptm <- proc.time()
+
 # Run the main entry point
 Main();
+
+# Print time elapsed
+print(paste("TIME ELAPSED: ", (proc.time() - ptm)[3]));
+
