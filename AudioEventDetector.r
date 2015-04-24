@@ -234,6 +234,12 @@ TestNonTrainingSamples <- function (optimalTheta)
     print(filePath);
     
     data <- load.wave(filePath);
+    if (data$rate != 16000)
+    {
+      print(data$rate);
+      print("ERROR! Sample rate != 16Khz");
+      stop();
+    }
     
     wasEventFound <- CheckForEvent(data, optimalTheta)
     if (!wasEventFound)
@@ -250,6 +256,12 @@ TestNonTrainingSamples <- function (optimalTheta)
     print(filePath);
     
     data <- load.wave(filePath);
+    if (data$rate != 16000)
+    {
+      print(data$rate);
+      print("ERROR! Sample rate != 16Khz");
+      stop();
+    }
     
     wasEventFound <- CheckForEvent(data, optimalTheta)
     if (wasEventFound)
@@ -369,11 +381,11 @@ Main <- function()
 ptm <- proc.time()
 
 # Run the main entry point
-Main();
+#Main();
 
 # TODO: Compare against non-training samples
-TestNonTrainingSamples(optimalTheta=opttheta);
-#TestNonTrainingSamples(optimalTheta=LAST_KNOWN_THETA);
+#TestNonTrainingSamples(optimalTheta=opttheta);
+TestNonTrainingSamples(optimalTheta=LAST_KNOWN_THETA);
 
 # Print time elapsed
 print(paste("TIME ELAPSED: ", (proc.time() - ptm)[3]));
