@@ -18,7 +18,7 @@ POSITIVE_FOLDER <<- "positive";
 NEGATIVE_FOLDER <<- "negative";
 NUM_SAMPLES <<- 0.010 * 16000; # 0.01s worth of samples at 16KHz
 SECTION_SIZE <<- 5;
-AUDIO_THRESHOLD <<- 1.0; # 100% increase
+AUDIO_THRESHOLD <<- 2.0; # 200% increase
 NUM_ITERATIONS <<- 1000000;
 LAST_KNOWN_THETA <<- c(-27.8164919, -3.0226850, 19.0595619, 39.2543972,  2.1650547,  -10.5485699, 11.8562808,  -10.0397605, -4.2093663,
                      18.0918260,  4.4826782,  -11.4337075,  1.7611361, 23.6021712, 13.2373426, 10.8262022,  6.3772729, 51.1833244,
@@ -94,6 +94,16 @@ GetSectionalEnergy <- function(data)
 GetDeltas <- function(elements)
 {
   delta <- elements[1:length(elements)-1];
+  
+  # TODO: Vectorize this. For now treat zeroes as a very small value to prevent div by zero.
+  for (i in (1:length(delta)))
+  {
+    if (delta[i] == 0)
+    {
+      delta[i] <- 0.00001;
+    }
+  }
+  
   delta <- (abs(delta - elements[2:length(elements)])/delta) ;
   
   return (delta);
@@ -139,11 +149,11 @@ PlotAudioData <- function(filePath)
   
   # Plot the sectional energy
   energies <- GetSectionalEnergy(data);
-  plot(energies);
+  barplot(energies);
 
   # Plot deltas between consecutive samples
   deltas <- GetDeltas(energies);
-  plot(deltas);
+  barplot(deltas);
   
   par(old.par);
 }
@@ -375,17 +385,25 @@ Main <- function()
   
   # Cost at optimal value of the theta
   print(optimalTheta$value);
+  print(opttheta);
+  
+  # Write theta out
+  fileConn <- file("OptimalTheta.txt");
+  write(opttheta, fileConn);
+  writeLine("Cost", fileConn);
+  write(optimalTheta$value, fileConn);
+  close(fileConn);
 }
 
 # Start Timing the training
 ptm <- proc.time()
 
 # Run the main entry point
-#Main();
+Main();
 
 # TODO: Compare against non-training samples
-#TestNonTrainingSamples(optimalTheta=opttheta);
-TestNonTrainingSamples(optimalTheta=LAST_KNOWN_THETA);
+TestNonTrainingSamples(optimalTheta=opttheta);
+#TestNonTrainingSamples(optimalTheta=LAST_KNOWN_THETA);
 
 # Print time elapsed
 print(paste("TIME ELAPSED: ", (proc.time() - ptm)[3]));
