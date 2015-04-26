@@ -14,14 +14,16 @@ require(audio);
 # So make sure the first 10ms contain the event to be detected.
 
 # Configuration Variables
+PLOT_ONLY <<- FALSE; # Only Plot the data in training files
 LOG_FILE <<- "log.log";
 OPTIMAL_THETA_LOGFILE <<- "OptimalTheta.log";
 POSITIVE_FOLDER <<- "positive";
 NEGATIVE_FOLDER <<- "negative";
+MIN_THRESHOLD <<- 0.01; # Treat samples below this as minimum
 NUM_SAMPLES <<- 0.010 * 16000; # 0.01s worth of samples at 16KHz
 SECTION_SIZE <<- 5;
-AUDIO_THRESHOLD <<- 1.58; # % increase before event detection starts
-NUM_ITERATIONS <<- 1000000;
+AUDIO_THRESHOLD <<- 0.05; # % increase before event detection starts
+NUM_ITERATIONS <<- 1; #1000000;
 LAST_KNOWN_THETA <<- c(-9.460925,-0.1676232,-11.45989,6.617613,-8.509732,-2.756163,26.00656,5.433123,-5.1109,-10.09702,-16.23733,-0.05093115,8.050109,-0.6314149,-0.8663847,
                        -11.16448,-7.606944,19.91732,5.978457,21.54498,-7.59011,-7.560708,-0.2843999,13.21496,-14.91531,5.159829,0.1982577,-8.455772,37.56543,-28.39935,
                        -7.83255,8.483995,-19.52272,8.583576,-25.24718,-8.742351,0.210617,-3.650255,-20.15341,-15.08544,7.416293,-10.89001,9.520285,14.39171,-23.16119,
@@ -79,11 +81,17 @@ CostFunction <- function(theta)
 # Feature Extract
 GetFeatures <- function(data)
 {
+  if (length(data) != NUM_SAMPLES)
+  {
+    Log("Length of data != NUM_SAMPLES " , length(data));
+    stop();  
+  }
+  
   ffts <- fft(data);
   
   # Use the real part (contribution of the cos waves)
   features <- Re(ffts);
-  
+
   # TEST: Do not Filter out extreme values
   #lapply(features, function(x) { if (x <= 0.05) { return (0);} else if (x >= 0.95){ return (0.95); } })
   
@@ -108,16 +116,6 @@ GetSectionalEnergy <- function(data)
 GetDeltas <- function(elements)
 {
   delta <- elements[1:length(elements)-1];
-  
-  # TODO: Vectorize this. For now treat zeroes as a very small value to prevent div by zero.
-  for (i in (1:length(delta)))
-  {
-    if (delta[i] == 0)
-    {
-      delta[i] <- 0.00001;
-    }
-  }
-  
   delta <- (abs(delta - elements[2:length(elements)])/delta) ;
   
   return (delta);
@@ -127,7 +125,7 @@ GetDeltas <- function(elements)
 # Plot waveforms
 PlotAudioData <- function(filePath)
 {
-  data <- load.wave(filePath)[1:NUM_SAMPLES];
+  data <- LoadDataFromWav(filePath)[1:NUM_SAMPLES];
   
   # Create a new plot for audio waveform
   dev.new();
@@ -135,7 +133,7 @@ PlotAudioData <- function(filePath)
   # Create a 2x2 grid plot and store the old par val for restoring later
   old.par <- par(mfrow=c(2,3));
   
-  plot(data, main=filePath, xlab="Amplitude", ylab="Time");
+  plot(data, main=filePath, xlab="Time", ylab="Amplitude");
   
   ffts <- fft(data);
   
@@ -190,7 +188,10 @@ LoadDataFromWav <- function(filePath)
     Log("ERROR! Not enoough samples. Expected : ", NUM_SAMPLES, "but got ", length(data));
     stop();
   }
-
+  
+  # Remove values less than 0.001
+  data <- sapply(data, function(x) { if (x <= MIN_THRESHOLD) { return (MIN_THRESHOLD);} else { return (x); } });
+  
   return (data);
 }
 #
@@ -210,7 +211,7 @@ CheckForEvent <- function(data, optimalTheta)
       start <- i*SECTION_SIZE;
       
       # Check if we have enough samples to use for training 
-      if (start + NUM_SAMPLES >= length(data))
+      if (start + NUM_SAMPLES - 1 >= length(data))
       {
         # No more samples
         break;
@@ -254,12 +255,7 @@ TestNonTrainingSamples <- function (optimalTheta)
     filePath <- paste(POSITIVE_TEST_FOLDER, file, sep = "/");
     Log(filePath);
     
-    data <- load.wave(filePath);
-    if (data$rate != 16000)
-    {
-      Log("ERROR! Sample rate != 16Khz, instead", data$rate);
-      stop();
-    }
+    data <- LoadDataFromWav(filePath);
     
     wasEventFound <- CheckForEvent(data, optimalTheta)
     if (!wasEventFound)
@@ -273,15 +269,9 @@ TestNonTrainingSamples <- function (optimalTheta)
   for (file in negativeTestFiles)
   {
     filePath <- paste(NEGATIVE_TEST_FOLDER, file, sep = "/");
-    print(filePath);
     
-    data <- load.wave(filePath);
-    if (data$rate != 16000)
-    {
-      Log("ERROR! Sample rate != 16Khz, instead", data$rate);
-      stop();
-    }
-    
+    data <- LoadDataFromWav(filePath);
+
     wasEventFound <- CheckForEvent(data, optimalTheta)
     if (wasEventFound)
     {
@@ -309,98 +299,108 @@ Main <- function()
   for (file in positiveFiles)
   {
     filePath <- paste(POSITIVE_FOLDER, file, sep = "/");
-    
-    data <- LoadDataFromWav(filePath);
-    
-    # Find the sectional which has a jump in energy to mark the start
-    start <- 0; # Invalid index
-    energies <- GetSectionalEnergy(data);
-    deltas <- GetDeltas(energies);
-    for (i in (1:length(deltas)))
-    {
-      # Choose the section in which the sudden jump in energy was seen
-      if (deltas[i] >= AUDIO_THRESHOLD)
+    if (!PLOT_ONLY)
+    { 
+      data <- LoadDataFromWav(filePath);
+      
+      # Find the sectional which has a jump in energy to mark the start
+      start <- 0; # Invalid index
+      energies <- GetSectionalEnergy(data);
+      deltas <- GetDeltas(energies);
+      for (i in (1:length(deltas)))
       {
-        start <- i*SECTION_SIZE;
-        break;
+        # Choose the section in which the sudden jump in energy was seen
+        if (deltas[i] >= AUDIO_THRESHOLD)
+        {
+          start <- i*SECTION_SIZE;
+          break;
+        }
       }
+      Log("DELTAS = ", deltas);
+      
+      # Check if we have enough samples to use for training 
+      if (start + NUM_SAMPLES - 1 >= length(data))
+      {
+        Log("ERROR: No jump found in wav");
+        stop();
+      }
+      
+      Xvec <<- c(Xvec, GetFeatures(data[start:(start + NUM_SAMPLES - 1)]));
+      Yvec <<- c(Yvec, 1);
     }
-    Log("DELTAS = ", deltas);
-    
-    # Check if we have enough samples to use for training 
-    if (start + NUM_SAMPLES >= length(data))
+    else
     {
-      Log("ERROR: No jump found in wav");
-      stop();
+      # Plot out discrete audio waveform, real and imaginary parts of the fft
+      PlotAudioData(filePath);
     }
-    
-    Xvec <<- c(Xvec, GetFeatures(data[start:(start + NUM_SAMPLES - 1)]));
-    Yvec <<- c(Yvec, 1);
-    
-    # Plot out discrete audio waveform, real and imaginary parts of the fft
-    PlotAudioData(filePath);
   }
   
   # Load negative data
   for (file in negativeFiles)
   {
     filePath <- paste(NEGATIVE_FOLDER, file, sep = "/");
-    
-    data <- LoadDataFromWav(filePath);
-    
-    # Find the sectional which has a jump in energy to mark the start
-    start <- 0; # Invalid index
-    energies <- GetSectionalEnergy(data);
-    deltas <- GetDeltas(energies);
-    for (i in (1:length(deltas)))
-    {
-      # Choose the section in which the sudden jump in energy was seen
-      if (deltas[i] >= AUDIO_THRESHOLD)
+    if (!PLOT_ONLY)
+    {  
+      data <- LoadDataFromWav(filePath);
+      
+      # Find the sectional which has a jump in energy to mark the start
+      start <- 0; # Invalid index
+      energies <- GetSectionalEnergy(data);
+      deltas <- GetDeltas(energies);
+      for (i in (1:length(deltas)))
       {
-        start <- i*SECTION_SIZE;
-        
-        # Check if we have enough samples to use for training 
-        if (start + NUM_SAMPLES >= length(data))
+        # Choose the section in which the sudden jump in energy was seen
+        if (deltas[i] >= AUDIO_THRESHOLD)
         {
-          break;
+          start <- i*SECTION_SIZE;
+          
+          # Check if we have enough samples to use for training 
+          if (start + NUM_SAMPLES - 1 >= length(data))
+          {
+            break;
+          }
+          
+          Xvec <<- c(Xvec, GetFeatures(data[start: (start + NUM_SAMPLES - 1)]));
+          Yvec <<- c(Yvec, 0);
         }
-        
-        Xvec <<- c(Xvec, GetFeatures(data[start: (start + NUM_SAMPLES - 1)]));
-        Yvec <<- c(Yvec, 0);
       }
     }
-
-    # Plot out discrete audio waveform, real and imaginary parts of the fft
-    PlotAudioData(filePath);
+    else
+    {
+      # Plot out discrete audio waveform, real and imaginary parts of the fft
+      PlotAudioData(filePath);
+    }
   }
   
-  # Convert the features and results to matrix form
-  X <<- matrix(Xvec, ncol=NUM_SAMPLES, byrow=T);
-  Y <<- matrix(Yvec, ncol=1);
-  
-  # Add ones to X
-  X <<- cbind(rep(1, nrow(X)), X);
-  
-  # Intial theta
-  initialTheta <- rep(0, ncol(X));
-  
-  # Cost at inital theta
-  cost <- CostFunction(initialTheta);
-  
-  # Get optimal theta using gradient descent
-  optimalTheta <- optim(par=initialTheta, fn=CostFunction, control = list(maxit = NUM_ITERATIONS));
-  opttheta <<- optimalTheta$par;
-  plot(opttheta);
-  
-  # Cost at optimal value of the theta
-  Log("OPTIMAL THETA VAL = ", optimalTheta$value);
-  Log("OPTIMAL THETA = " , opttheta);
-  
-  # Write theta out
-  fileConn <- file(OPTIMAL_THETA_LOGFILE);
-  write(opttheta, fileConn);
-  writeLine("Cost", fileConn);
-  close(fileConn);
+  if (!PLOT_ONLY)
+  {
+    # Convert the features and results to matrix form
+    X <<- matrix(Xvec, ncol=NUM_SAMPLES, byrow=T);
+    Y <<- matrix(Yvec, ncol=1);
+    
+    # Add ones to X
+    X <<- cbind(rep(1, nrow(X)), X);
+    
+    # Intial theta
+    initialTheta <- rep(0, ncol(X));
+    
+    # Cost at inital theta
+    cost <- CostFunction(initialTheta);
+    
+    # Get optimal theta using gradient descent
+    optimalTheta <- optim(par=initialTheta, fn=CostFunction, control = list(maxit = NUM_ITERATIONS));
+    opttheta <<- optimalTheta$par;
+    plot(opttheta);
+    
+    # Cost at optimal value of the theta
+    Log("OPTIMAL THETA VAL = ", optimalTheta$value);
+    Log("OPTIMAL THETA = " , opttheta);
+    
+    # Write theta out
+    fileConn <- file(OPTIMAL_THETA_LOGFILE);
+    write(opttheta, fileConn);
+    close(fileConn);
+  }
 }
 
 # Start Timing the training
@@ -413,10 +413,12 @@ Log("Starting");
 # Run the main entry point
 Main();
 
-# TODO: Compare against non-training samples
-TestNonTrainingSamples(optimalTheta=opttheta);
-TestNonTrainingSamples(optimalTheta=LAST_KNOWN_THETA);
-
+if (!PLOT_ONLY)
+{
+  # TODO: Compare against non-training samples
+  TestNonTrainingSamples(optimalTheta=opttheta);
+  TestNonTrainingSamples(optimalTheta=LAST_KNOWN_THETA);
+}
 # Print time elapsed
 Log("TIME ELAPSED: ", (proc.time() - ptm)[3]);
 
