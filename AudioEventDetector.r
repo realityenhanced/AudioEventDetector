@@ -324,7 +324,7 @@ Main <- function()
         Log("ERROR: No jump found in wav");
         stop();
       }
-      
+
       Xvec <<- c(Xvec, GetFeatures(data[start:(start + NUM_SAMPLES - 1)]));
       Yvec <<- c(Yvec, 1);
     }
@@ -359,7 +359,7 @@ Main <- function()
           {
             break;
           }
-          
+
           Xvec <<- c(Xvec, GetFeatures(data[start: (start + NUM_SAMPLES - 1)]));
           Yvec <<- c(Yvec, 0);
         }
