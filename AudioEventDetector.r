@@ -14,6 +14,7 @@ require(audio);
 # So make sure the first 10ms contain the event to be detected.
 
 # Configuration Variables
+TEST_LKG_THETA_ONLY <<- TRUE;
 PLOT_ONLY <<- FALSE; # Only Plot the data in training files
 LOG_FILE <<- "log.log";
 OPTIMAL_THETA_LOGFILE <<- "OptimalTheta.log";
