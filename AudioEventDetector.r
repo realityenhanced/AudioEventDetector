@@ -14,6 +14,8 @@ require(audio);
 # So make sure the first 10ms contain the event to be detected.
 
 # Configuration Variables
+LOG_FILE <<- "log.log";
+OPTIMAL_THETA_LOGFILE <<- "OptimalTheta.log";
 POSITIVE_FOLDER <<- "positive";
 NEGATIVE_FOLDER <<- "negative";
 NUM_SAMPLES <<- 0.010 * 16000; # 0.01s worth of samples at 16KHz
@@ -38,6 +40,25 @@ Y <<- 0; # results
 opttheta <<- 0; # final theta calculated
 
 # HELPER FUNCTIONS
+# Initialize logs
+InitLog <- function()
+{
+  write(paste(proc.time()[3], "Init Logs"), LOG_FILE, append=FALSE);
+}
+
+# Logging helper func
+Log <- function (...)
+{
+    arguments <- list(...); 
+    numArgs <- length(arguments);
+    str <- proc.time()[3]; # Elapsed time 
+    for(i in (1:numArgs))
+    {
+      str <- paste(str, arguments[i], sep=" ");
+    }
+    write(str, LOG_FILE, append=TRUE);
+    print(str);
+}
 
 # Sigmoid function
 Sigmoid <- function(z)
@@ -155,21 +176,18 @@ PlotAudioData <- function(filePath)
 # Load a wav file and extract features
 LoadDataFromWav <- function(filePath)
 {
-  print(filePath);
+  Log("Loading data from: ", filePath);
   
   data <- load.wave(filePath);
   if (data$rate != 16000)
   {
-    print(data$rate);
-    print("ERROR! Sample rate != 16Khz");
+    Log("ERROR! Sample rate != 16Khz, instead", data$rate);
     stop();
   }
   
   if (length(data) < NUM_SAMPLES)
-  {
-    print(length(data));
-    print(NUM_SAMPLES);      
-    print("ERROR! Not enoough samples");
+  {  
+    Log("ERROR! Not enoough samples. Expected : ", NUM_SAMPLES, "but got ", length(data));
     stop();
   }
 
@@ -203,7 +221,7 @@ CheckForEvent <- function(data, optimalTheta)
       probability <- Sigmoid(features%*%optimalTheta);
       if (probability > 0.5)
       {
-        print(paste("EVENT FOUND AT ", start));
+        Log("EVENT FOUND AT ", start);
         return (TRUE);
       }
     }
@@ -211,7 +229,7 @@ CheckForEvent <- function(data, optimalTheta)
   
   if (start == 0)
   {
-    print("NO JUMP FOUND");
+    Log("NO JUMP FOUND");
   }
   
   return (FALSE);
@@ -234,20 +252,19 @@ TestNonTrainingSamples <- function (optimalTheta)
   for (file in positiveTestFiles)
   {
     filePath <- paste(POSITIVE_TEST_FOLDER, file, sep = "/");
-    print(filePath);
+    Log(filePath);
     
     data <- load.wave(filePath);
     if (data$rate != 16000)
     {
-      print(data$rate);
-      print("ERROR! Sample rate != 16Khz");
+      Log("ERROR! Sample rate != 16Khz, instead", data$rate);
       stop();
     }
     
     wasEventFound <- CheckForEvent(data, optimalTheta)
     if (!wasEventFound)
     {
-      print("FAILED: Event not found in positive sample");
+      Log("FAILED: Event not found in positive sample");
       numIncorrect <- numIncorrect + 1;
     }
   }
@@ -261,20 +278,19 @@ TestNonTrainingSamples <- function (optimalTheta)
     data <- load.wave(filePath);
     if (data$rate != 16000)
     {
-      print(data$rate);
-      print("ERROR! Sample rate != 16Khz");
+      Log("ERROR! Sample rate != 16Khz, instead", data$rate);
       stop();
     }
     
     wasEventFound <- CheckForEvent(data, optimalTheta)
     if (wasEventFound)
     {
-      print("FAILED: Event was found in negative sample");
+      Log("FAILED: Event was found in negative sample");
       numIncorrect <- numIncorrect + 1;
     }
   }
   
-  print(paste("NUM INCORRECT = ", numIncorrect));
+  Log("NUM INCORRECT = ", numIncorrect);
 }
 
 # Main entry point
@@ -309,12 +325,12 @@ Main <- function()
         break;
       }
     }
-    print(max(deltas));
+    Log("DELTAS = ", deltas);
     
     # Check if we have enough samples to use for training 
     if (start + NUM_SAMPLES >= length(data))
     {
-      print("ERROR: No jump found in wav");
+      Log("ERROR: No jump found in wav");
       stop();
     }
     
@@ -377,27 +393,30 @@ Main <- function()
   plot(opttheta);
   
   # Cost at optimal value of the theta
-  print(optimalTheta$value);
-  print(opttheta);
+  Log("OPTIMAL THETA VAL = ", optimalTheta$value);
+  Log("OPTIMAL THETA = " , opttheta);
   
   # Write theta out
-  fileConn <- file("OptimalTheta.txt");
+  fileConn <- file(OPTIMAL_THETA_LOGFILE);
   write(opttheta, fileConn);
   writeLine("Cost", fileConn);
-  write(optimalTheta$value, fileConn);
   close(fileConn);
 }
 
 # Start Timing the training
 ptm <- proc.time()
 
+# Init log
+InitLog();
+Log("Starting");
+
 # Run the main entry point
-#Main();
+Main();
 
 # TODO: Compare against non-training samples
-#TestNonTrainingSamples(optimalTheta=opttheta);
+TestNonTrainingSamples(optimalTheta=opttheta);
 TestNonTrainingSamples(optimalTheta=LAST_KNOWN_THETA);
 
 # Print time elapsed
-print(paste("TIME ELAPSED: ", (proc.time() - ptm)[3]));
+Log("TIME ELAPSED: ", (proc.time() - ptm)[3]);
 
